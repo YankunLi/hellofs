@@ -107,6 +107,9 @@ func (d *Dir) Fsync(ctx context.Context, req *fuse.FsyncRequest) error {
 	return nil
 }
 
+func (d *Dir) Forget() {
+}
+
 func (d *Dir) Rename(ctx context.Context, req *fuse.RenameRequest, newDir fs.Node) error {
 	dir, ok := newDir.(*Dir)
 	if !ok {
