@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	"bazil.org/fuse"
 	"bazil.org/fuse/fs"
@@ -19,7 +20,7 @@ func usage() {
 	flag.PrintDefaults()
 }
 
-func main() {
+func Start() {
 	flag.Usage = usage
 	flag.Parse()
 
@@ -41,10 +42,10 @@ func main() {
 	}
 	defer c.Close()
 
+	realfs := NewRealFS()
+
 	filesys := &FS{
-		GeneraterInode: 1,
-		Inodes:         make(map[uint64]*Inode),
-		Dirs:           make(map[uint64][]*Inode),
+		RemoteFS: realfs,
 	}
 	err = fs.Serve(c, filesys)
 	if err != nil {
@@ -58,29 +59,16 @@ func main() {
 	}
 }
 
-type Inode struct {
-	Ino   uint64
-	Size  uint64
-	IType uint8
-	Name  string
-}
-
-func NewInode(name string, ino uint64, t uint8) *Inode {
-	return &Inode{Ino: ino, Name: name, Size: 5, IType: t}
-}
-
 // FS implements the hello world file system.
 type FS struct {
-	GeneraterInode uint64
-	Inodes         map[uint64]*Inode
-	Dirs           map[uint64][]*Inode
+	RemoteFS *RealFS
 }
 
 func (fs *FS) Root() (fs.Node, error) {
-	node := &Inode{Ino: 1, Size: 512, IType: 0, Name: "root"}
-	root := &Dir{Fs: fs, Ino: 1}
-	fs.Inodes[root.Ino] = node
-	fs.Dirs[root.Ino] = make([]*Inode, 0, 1024)
+	inode := &Inode{ino: 1, size: 0, nlink: 1, ctime: time.Now(), mtime: time.Now(), atime: time.Now()}
+	root := NewDir(fs, inode.ino)
+	fs.RemoteFS.Inodes[root.Ino] = inode
+	fs.RemoteFS.Dirs[root.Ino] = make([]*Dentry, 0, 1024)
 
 	return root, nil
 }
@@ -89,7 +77,6 @@ func (fs *FS) Root() (fs.Node, error) {
 type Dir struct {
 	Fs  *FS
 	Ino uint64
-	//	Node *Inode
 }
 
 func NewDir(filesys *FS, ino uint64) *Dir {
@@ -107,49 +94,98 @@ func (d *Dir) Mkdir(ctx context.Context, req *fuse.MkdirRequest) (fs.Node, error
 	//	// Umask of the request. Not supported on OS X.
 	//	Umask os.FileMode
 	//}
-	ino := d.Fs.GeneraterInode + 1
-	node := NewInode(req.Name, ino, 0)
-	d.Fs.GeneraterInode = ino
-	d.Fs.Dirs[d.Ino] = append(d.Fs.Dirs[d.Ino], node)
-	d.Fs.Inodes[ino] = node
-	d.Fs.Dirs[ino] = make([]*Inode, 0, 1024)
-	child := NewDir(d.Fs, node.Ino)
+	//ino := d.Fs.GeneraterInode + 1
+	//	node := NewInode(req.Name, ino, 0)
+	inode := d.Fs.RemoteFS.CreateInode()
+	d.Fs.RemoteFS.CreateDentry(d.Ino, inode.ino, req.Name, fuse.DT_Dir)
+	child := NewDir(d.Fs, inode.ino)
 
 	return child, nil
 }
 
+func (d *Dir) Fsync(ctx context.Context, req *fuse.FsyncRequest) error {
+	return nil
+}
+
+func (d *Dir) Rename(ctx context.Context, req *fuse.RenameRequest, newDir fs.Node) error {
+	dir, ok := newDir.(*Dir)
+	if !ok {
+	}
+	dentrys, ok := d.Fs.RemoteFS.Dirs[dir.Ino]
+	if !ok {
+	}
+	for _, dentry := range dentrys {
+		if dentry.Name == req.OldName {
+			dentry.Name = req.NewName
+			break
+		}
+	}
+
+	return nil
+}
+
 func (d *Dir) Create(ctx context.Context, req *fuse.CreateRequest, resp *fuse.CreateResponse) (fs.Node, fs.Handle, error) {
-	ino := d.Fs.GeneraterInode + 1
-	node := NewInode(req.Name, ino, 1)
-	d.Fs.GeneraterInode = ino
-	d.Fs.Dirs[d.Ino] = append(d.Fs.Dirs[d.Ino], node)
-	d.Fs.Inodes[ino] = node
-	child := NewFile(d.Fs, node.Ino)
+	inode := d.Fs.RemoteFS.CreateInode()
+	//type CreateRequest struct {
+	//	Header `json:"-"`
+	//	Name   string
+	//	Flags  OpenFlags
+	//	Mode   os.FileMode
+	//	// Umask of the request. Not supported on OS X.
+	//	Umask os.FileMode
+	//}
+	d.Fs.RemoteFS.CreateDentry(d.Ino, inode.ino, req.Name, fuse.DT_File)
+	child := NewFile(d.Fs, inode.ino)
 
 	return child, child, nil
 }
 
 func (d *Dir) Attr(ctx context.Context, a *fuse.Attr) error {
-	fmt.Println("dir: ", d.Ino, " call Attr")
-	node := d.Fs.Inodes[d.Ino]
-	a.Inode = node.Ino
-	a.Mode = os.ModeDir | 0555
-	a.Size = node.Size
-
+	//type Attr struct {
+	//	Valid time.Duration // how long Attr can be cached
+	//
+	//	Inode     uint64      // inode number
+	//	Size      uint64      // size in bytes
+	//	Blocks    uint64      // size in 512-byte units
+	//	Atime     time.Time   // time of last access
+	//	Mtime     time.Time   // time of last modification
+	//	Ctime     time.Time   // time of last inode change
+	//	Crtime    time.Time   // time of creation (OS X only)
+	//	Mode      os.FileMode // file mode
+	//	Nlink     uint32      // number of links (usually 1)
+	//	Uid       uint32      // owner uid
+	//	Gid       uint32      // group gid
+	//	Rdev      uint32      // device numbers
+	//	Flags     uint32      // chflags(2) flags (OS X only)
+	//	BlockSize uint32      // preferred blocksize for filesystem I/O
+	//	fmt.Println("dir: ", d.Ino, " call Attr")
+	inode, ok := d.Fs.RemoteFS.Inodes[d.Ino]
+	if ok {
+		a.Inode = inode.ino
+		a.Atime = inode.atime
+		a.Mtime = inode.mtime
+		a.Crtime = inode.ctime
+		a.Uid = inode.uid
+		a.Gid = inode.gid
+		//		a.Mode = inode.mode
+		a.Nlink = inode.nlink
+		a.Mode = os.ModeDir | 0555
+		a.Size = inode.size
+	}
 	return nil
 }
 
 func (d *Dir) Lookup(ctx context.Context, name string) (fs.Node, error) {
 	fmt.Println("dir: ", d.Ino, " call Lookup")
-	inodes := d.Fs.Dirs[d.Ino]
-	if len(inodes) > 0 {
-		for _, node := range inodes {
+	dentrys := d.Fs.RemoteFS.Dirs[d.Ino]
+	if len(dentrys) > 0 {
+		for _, dentry := range dentrys {
 			//			fmt.Println(reflect.TypeOf(node))
-			if node.Name == name {
-				if node.IType == 0 {
-					return &Dir{Fs: d.Fs, Ino: node.Ino}, nil
+			if dentry.Name == name {
+				if dentry.Type == fuse.DT_Dir {
+					return &Dir{Fs: d.Fs, Ino: dentry.Inode}, nil
 				}
-				return &File{Fs: d.Fs, Ino: node.Ino}, nil
+				return &File{Fs: d.Fs, Ino: dentry.Inode}, nil
 			}
 		}
 	}
@@ -159,22 +195,22 @@ func (d *Dir) Lookup(ctx context.Context, name string) (fs.Node, error) {
 
 func (d *Dir) ReadDirAll(ctx context.Context) ([]fuse.Dirent, error) {
 	fmt.Println("dir: ", d.Ino, " call ReadDirAll")
-	var dirs []fuse.Dirent
-	if inodes, ok := d.Fs.Dirs[d.Ino]; ok {
-		if len(inodes) > 0 {
+	var dirents []fuse.Dirent
+	if dentrys, ok := d.Fs.RemoteFS.Dirs[d.Ino]; ok {
+		if len(dentrys) > 0 {
 			var d fuse.Dirent
-			for _, node := range inodes {
-				if node.IType == 0 {
-					d = fuse.Dirent{Inode: node.Ino, Name: node.Name, Type: fuse.DT_Dir}
+			for _, dentry := range dentrys {
+				if dentry.Type == fuse.DT_Dir {
+					d = fuse.Dirent{Inode: dentry.Inode, Name: dentry.Name, Type: fuse.DT_Dir}
 				} else {
-					d = fuse.Dirent{Inode: node.Ino, Name: node.Name, Type: fuse.DT_File}
+					d = fuse.Dirent{Inode: dentry.Inode, Name: dentry.Name, Type: fuse.DT_File}
 				}
-				dirs = append(dirs, d)
+				dirents = append(dirents, d)
 			}
 		}
 	}
 
-	return dirs, nil
+	return dirents, nil
 }
 
 func (d *Dir) Remove(ctx context.Context, req *fuse.RemoveRequest) error {
@@ -187,11 +223,11 @@ func (d *Dir) Remove(ctx context.Context, req *fuse.RemoveRequest) error {
 	fmt.Println("req.Header: ", req.Header)
 	fmt.Println("req.Name: ", req.Name)
 	fmt.Println("req.Dir: ", req.Dir)
-	inodes := d.Fs.Dirs[d.Ino]
-	for index, node := range inodes {
-		if node.Name == req.Name {
-			delete(d.Fs.Inodes, node.Ino)
-			d.Fs.Dirs[d.Ino] = append(d.Fs.Dirs[d.Ino][:index], d.Fs.Dirs[d.Ino][index+1:]...)
+	dentrys := d.Fs.RemoteFS.Dirs[d.Ino]
+	for index, dentry := range dentrys {
+		if dentry.Name == req.Name {
+			delete(d.Fs.RemoteFS.Inodes, dentry.Inode)
+			d.Fs.RemoteFS.Dirs[d.Ino] = append(d.Fs.RemoteFS.Dirs[d.Ino][:index], d.Fs.RemoteFS.Dirs[d.Ino][index+1:]...)
 			break
 		}
 	}
@@ -213,11 +249,19 @@ const greeting = "hello, world\n"
 
 func (f *File) Attr(ctx context.Context, a *fuse.Attr) error {
 	fmt.Println("File: ", f.Ino, " call Attr")
-	node, ok := f.Fs.Inodes[f.Ino]
+	inode, ok := f.Fs.RemoteFS.Inodes[f.Ino]
 	if ok {
-		a.Inode = node.Ino
+		fmt.Println("fill file attr")
+		a.Inode = inode.ino
+		a.Atime = inode.atime
+		a.Mtime = inode.mtime
+		a.Crtime = inode.ctime
+		a.Uid = inode.uid
+		a.Gid = inode.gid
+		//		a.Mode = inode.mode
+		a.Nlink = inode.nlink
 		a.Mode = 0444
-		a.Size = node.Size
+		a.Size = inode.size
 	}
 
 	return nil
@@ -225,4 +269,20 @@ func (f *File) Attr(ctx context.Context, a *fuse.Attr) error {
 
 func (f *File) ReadAll(ctx context.Context) ([]byte, error) {
 	return []byte(greeting), nil
+	//fuse.ENOSYS not support
+}
+
+func (f *File) Forget() {
+}
+
+func (f *File) Flush(ctx context.Context, req *fuse.FlushRequest) (err error) {
+	return fuse.ENOSYS
+}
+
+func (f *File) Fsync(ctx context.Context, req *fuse.FsyncRequest) (err error) {
+	return fuse.ENOSYS
+}
+
+func (f *File) Open(ctx context.Context, req *fuse.OpenRequest, resp *fuse.OpenResponse) (fs.Handle, error) {
+	return f, fuse.ENOSYS
 }
