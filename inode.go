@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"bazil.org/fuse"
+	"github.com/tiglabs/containerfs/proto"
 )
 
 type Inode struct {
@@ -65,23 +66,24 @@ func NewDentry(ino uint64, name string, t fuse.DirentType) *Dentry {
 //	return fmt.Sprintf("ino(%v) mode(%v) size(%v) nlink(%v) uid(%v) gid(%v) exp(%v) mtime(%v) target(%v)", inode.ino, inode.mode, inode.size, inode.nlink, inode.uid, inode.gid, time.Unix(0, inode.expiration).Format(LogTimeFormat), inode.mtime, inode.target)
 //}
 //
-//func (inode *Inode) setattr(req *fuse.SetattrRequest) (valid uint32) {
-//	if req.Valid.Mode() {
-//		inode.mode = req.Mode
-//		valid |= proto.AttrMode
-//	}
-//
-//	if req.Valid.Uid() {
-//		inode.uid = req.Uid
-//		valid |= proto.AttrUid
-//	}
-//
-//	if req.Valid.Gid() {
-//		inode.gid = req.Gid
-//		valid |= proto.AttrGid
-//	}
-//	return
-//}
+func (inode *Inode) setattr(req *fuse.SetattrRequest) (valid uint32) {
+	if req.Valid.Mode() {
+		inode.mode = req.Mode
+		valid |= proto.AttrMode
+	}
+
+	if req.Valid.Uid() {
+		inode.uid = req.Uid
+		valid |= proto.AttrUid
+	}
+
+	if req.Valid.Gid() {
+		inode.gid = req.Gid
+		valid |= proto.AttrGid
+	}
+	return
+}
+
 //
 ////func (inode *Inode) fill(info *proto.InodeInfo) {
 ////	inode.ino = info.Inode
@@ -96,20 +98,21 @@ func NewDentry(ino uint64, name string, t fuse.DirentType) *Dentry {
 ////	inode.mode = proto.OsMode(info.Mode)
 ////}
 //
-//func (inode *Inode) fillAttr(attr *fuse.Attr) {
-//	attr.Valid = AttrValidDuration
-//	attr.Nlink = inode.nlink
-//	attr.Inode = inode.ino
-//	attr.Mode = inode.mode
-//	attr.Size = inode.size
-//	attr.Blocks = attr.Size >> 9 // In 512 bytes
-//	attr.Atime = inode.atime
-//	attr.Ctime = inode.ctime
-//	attr.Mtime = inode.mtime
-//	attr.BlockSize = DefaultBlksize
-//	attr.Uid = inode.uid
-//	attr.Gid = inode.gid
-//}
+func (inode *Inode) fillAttr(attr *fuse.Attr) {
+	//attr.Valid = AttrValidDuration
+	attr.Nlink = inode.nlink
+	attr.Inode = inode.ino
+	attr.Mode = inode.mode
+	attr.Size = inode.size
+	attr.Blocks = attr.Size >> 9 // In 512 bytes
+	attr.Atime = inode.atime
+	attr.Ctime = inode.ctime
+	attr.Mtime = inode.mtime
+	attr.BlockSize = 4096
+	attr.Uid = inode.uid
+	attr.Gid = inode.gid
+}
+
 //
 //func (inode *Inode) expired() bool {
 //	if time.Now().UnixNano() > inode.expiration {

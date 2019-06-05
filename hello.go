@@ -86,6 +86,10 @@ func NewDir(filesys *FS, ino uint64) *Dir {
 	}
 }
 
+func (d *Dir) Setattr(ctx context.Context, req *fuse.SetattrRequest, resp *fuse.SetattrResponse) error {
+	return nil
+}
+
 func (d *Dir) Mkdir(ctx context.Context, req *fuse.MkdirRequest) (fs.Node, error) {
 	//type MkdirRequest struct {
 	//	Header `json:"-"`
@@ -108,6 +112,18 @@ func (d *Dir) Fsync(ctx context.Context, req *fuse.FsyncRequest) error {
 }
 
 func (d *Dir) Forget() {
+}
+
+func (d *Dir) Link(ctx context.Context, req *fuse.LinkRequest, old fs.Node) (fs.Node, error) {
+	file, ok := old.(*File)
+	if !ok {
+	}
+	d.Fs.RemoteFS.CreateDentry(d.Ino, file.Ino, req.NewName, 1)
+	d.Fs.RemoteFS.Inodes[file.Ino].nlink = d.Fs.RemoteFS.Inodes[file.Ino].nlink + 1
+
+	newfile := NewFile(d.Fs, file.Ino)
+
+	return newfile, nil
 }
 
 func (d *Dir) Rename(ctx context.Context, req *fuse.RenameRequest, newDir fs.Node) error {
