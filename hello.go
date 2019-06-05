@@ -87,6 +87,10 @@ func NewDir(filesys *FS, ino uint64) *Dir {
 }
 
 func (d *Dir) Setattr(ctx context.Context, req *fuse.SetattrRequest, resp *fuse.SetattrResponse) error {
+	inode := d.Fs.RemoteFS.Inodes[d.Ino]
+	inode.setattr(req)
+	inode.fillAttr(&resp.Attr)
+
 	return nil
 }
 
