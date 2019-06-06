@@ -87,11 +87,20 @@ func NewDir(filesys *FS, ino uint64) *Dir {
 }
 
 func (d *Dir) Setattr(ctx context.Context, req *fuse.SetattrRequest, resp *fuse.SetattrResponse) error {
+	fmt.Println("Call setattr: ")
 	inode := d.Fs.RemoteFS.Inodes[d.Ino]
 	inode.setattr(req)
 	inode.fillAttr(&resp.Attr)
 
 	return nil
+}
+
+func (d *Dir) Symlink(ctx context.Context, req *fuse.SymlinkRequest) (fs.Node, error) {
+	fmt.Println("%v", *req)
+	inode := d.Fs.RemoteFS.CreateInode()
+	inode.target = []byte(req.Target)
+	d.Fs.RemoteFS.CreateDentry(d.Ino, inode.ino, req.NewName, fuse.DT_Link)
+	return NewFile(d.Fs, inode.ino), nil
 }
 
 func (d *Dir) Mkdir(ctx context.Context, req *fuse.MkdirRequest) (fs.Node, error) {
@@ -290,10 +299,10 @@ func (f *File) Attr(ctx context.Context, a *fuse.Attr) error {
 	return nil
 }
 
-func (f *File) ReadAll(ctx context.Context) ([]byte, error) {
-	return []byte(greeting), nil
-	//fuse.ENOSYS not support
-}
+//func (f *File) ReadAll(ctx context.Context) ([]byte, error) {
+//	return []byte(greeting), nil
+//	//fuse.ENOSYS not support
+//}
 
 func (f *File) Forget() {
 }
@@ -307,5 +316,21 @@ func (f *File) Fsync(ctx context.Context, req *fuse.FsyncRequest) (err error) {
 }
 
 func (f *File) Open(ctx context.Context, req *fuse.OpenRequest, resp *fuse.OpenResponse) (fs.Handle, error) {
-	return f, fuse.ENOSYS
+	fmt.Println("Call Open callback: ")
+	fmt.Println("Open response : handle: %d", resp.Handle)
+	return f, nil
+}
+
+func (f *File) Read(ctx context.Context, req *fuse.ReadRequest, resp *fuse.ReadResponse) (err error) {
+	fmt.Println("Call Read callback: ")
+
+	fmt.Printf("read request: offset: %d size: %d handleID: %d \n", req.Offset, req.Size, req.Handle)
+	//fmt.Printf("reaponse length: %d, data: %v\n", len(resp.Data), resp.Data)
+	//var data []byte
+	for i := 0; i < req.Size; i++ {
+		resp.Data = append(resp.Data, byte(66))
+	}
+	//	resp.Dataappend(resp.Data[:fuse.OutHeaderSize], data...)
+
+	return nil
 }

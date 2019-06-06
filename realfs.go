@@ -24,7 +24,7 @@ func (r *RealFS) CreateInode() *Inode {
 	r.GeneraterInode = r.GeneraterInode + 1
 	inode := &Inode{
 		ino:    r.GeneraterInode,
-		size:   0,
+		size:   100 * 1024,
 		nlink:  1,
 		uid:    0,
 		gid:    0,
