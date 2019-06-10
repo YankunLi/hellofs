@@ -334,3 +334,12 @@ func (f *File) Read(ctx context.Context, req *fuse.ReadRequest, resp *fuse.ReadR
 
 	return nil
 }
+
+func (f *File) Write(ctx context.Context, req *fuse.WriteRequest, resp *fuse.WriteResponse) (err error) {
+	fmt.Println("Call Write callback: ")
+	fmt.Printf("write request offset: %d size: %d \n", req.Offset, len(req.Data))
+	//	fmt.Println("write content : ", req.Data)
+	resp.Size = len(req.Data)
+
+	return nil
+}
