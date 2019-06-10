@@ -112,15 +112,3 @@ func (inode *Inode) fillAttr(attr *fuse.Attr) {
 	attr.Uid = inode.uid
 	attr.Gid = inode.gid
 }
-
-//
-//func (inode *Inode) expired() bool {
-//	if time.Now().UnixNano() > inode.expiration {
-//		return true
-//	}
-//	return false
-//}
-//
-//func (inode *Inode) setExpiration(t time.Duration) {
-//	inode.expiration = time.Now().Add(t).UnixNano()
-//}

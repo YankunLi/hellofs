@@ -340,6 +340,7 @@ func (f *File) Write(ctx context.Context, req *fuse.WriteRequest, resp *fuse.Wri
 	fmt.Printf("write request offset: %d size: %d \n", req.Offset, len(req.Data))
 	//	fmt.Println("write content : ", req.Data)
 	resp.Size = len(req.Data)
+	f.Fs.RemoteFS.Inodes[f.Ino].size = f.Fs.RemoteFS.Inodes[f.Ino].size + uint64(len(req.Data))
 
 	return nil
 }
